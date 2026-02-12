@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>Scheduler.log Analyzer</title>
+
+<!-- Chart.js as separate file -->
+<script src="./chart.umd.min.js"></script>
+
+<style>
+body { margin:0; background:#0f172a; color:#e5e7eb; font-family:system-ui,sans-serif; }
+header { padding:16px; background:#020617; border-bottom:1px solid #1e293b; }
+#top-panel { padding:16px; }
+
+button, input[type="text"] {
+  padding:6px 14px;
+  margin-right:8px;
+  background:#3b82f6;
+  border:none;
+  border-radius:6px;
+  color:white;
+  font-size:13px;
+  cursor:pointer;
+}
+
+button.secondary { background:#1f2937; }
+
+.file-wrapper {
+  display:inline-flex;
+  align-items:center;
+  position:relative;
+}
+.file-wrapper input[type="file"] {
+  position:absolute;
+  opacity:0;
+  width:200px;
+  height:32px;
+  cursor:pointer;
+}
+.file-wrapper .file-label {
+  background:#3b82f6;
+  padding:6px 14px;
+  border-radius:6px;
+  width:200px;
+  text-align:center;
+}
+
+.stats { margin-top:12px; font-size:13px; color:#9ca3af; }
+.stats b { color:#e5e7eb; }
+
+table {
+  width:100%;
+  border-collapse:collapse;
+  font-size:12px;
+  margin-top:12px;
+}
+th, td {
+  padding:6px;
+  border-bottom:1px solid #1e293b;
+}
+th { color:#94a3b8; }
+
+#errorLog {
+  margin-top:8px;
+  white-space:pre-wrap;
+  color:#fca5a5;
+  font-size:12px;
+}
+
+details summary {
+  cursor:pointer;
+  font-size:13px;
+  color:#cbd5e1;
+  margin-top:12px;
+}
+details pre {
+  background:#020617;
+  padding:12px;
+  border:1px solid #334155;
+  border-radius:6px;
+  font-size:12px;
+  white-space:pre-wrap;
+  margin-top:8px;
+}
+
+.config-block {
+  margin-top:12px;
+  border-top:1px solid #1e293b;
+  padding-top:8px;
+}
+.config-key {
+  font-weight:600;
+  color:#38bdf8;
+}
+
+.chart-container {
+  margin-top:12px;
+}
+
+.about-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+
+.about-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: white;
+  font-weight: 600;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.about-label {
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.about-tooltip {
+  position: absolute;
+  top: 28px;
+  right: 0;
+  width: 360px;
+  background: #020617;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
+  color: #e5e7eb;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  display: none;
+  z-index: 100;
+}
+
+.about-tooltip ul {
+  padding-left: 16px;
+  margin: 6px 0;
+}
+
+.about-wrapper:hover .about-tooltip {
+  display: block;
+}
+
+
+</style>
+</head>
+
+<body>
+
+<header style="display:flex; justify-content:space-between; align-items:center;">
+  <b>Scheduler.log Analyzer</b>
+<div class="about-wrapper">
+  <span class="about-icon">?</span>
+  <span class="about-label">About</span>
+
+  <div class="about-tooltip">
+    <b>Scheduler.log Analyzer</b><br><br>
+
+    <b>Purpose</b><br>
+    Analyze Creatio <code>Scheduler.log</code> files:
+    <ul>
+      <li>JobStart statistics by class</li>
+      <li>Time-based JobStart load</li>
+      <li>Scheduler configuration inspection</li>
+    </ul>
+
+    <b>Input file</b><br>
+    Upload a <code>Scheduler.log</code> file from a Creatio application Nlog (currently only on-site NET.Framework app logs supported (0/Log/Scheduler.log))<br><br>
+
+    <b>Controls</b>
+    <ul>
+      <li><b>Apply</b> — apply date/time filter</li>
+      <li><b>Visualise jobs</b> — render JobStart load chart</li>
+    </ul>
+
+    Time values are taken from the log without timezone assumptions.
+  </div>
+</div>
+</header>
+
+<details id="infoPanel" hidden>
+  <summary>About this tool</summary>
+  <div class="details-block">
+    <b>Purpose</b><br>
+    This tool analyzes Creatio Scheduler.log files and provides:
+    <ul>
+      <li>JobStart statistics by job class</li>
+      <li>Time-based JobStart load visualization</li>
+      <li>Scheduler configuration inspection</li>
+    </ul>
+
+    <b>Input file</b><br>
+    Upload a <code>Scheduler.log</code> file from a Creatio application logs (currently supported on-site logs for Net.Framework applications (0/Log/Scheduler.log)).
+
+    <br><br>
+    <b>Main controls</b>
+    <ul>
+      <li><b>Choose Scheduler.log file</b> — loads and parses the log</li>
+      <li><b>Apply</b> — applies date/time filter to statistics</li>
+      <li><b>Visualise jobs</b> — shows JobStart load chart for the filtered range</li>
+    </ul>
+
+    <b>Notes</b><br>
+    Time values are taken directly from the log file without timezone assumptions.
+  </div>
+</details>
+
+
+<div id="top-panel">
+
+  <div class="file-wrapper">
+    <input type="file" id="fileInput" accept=".log,.txt">
+    <div class="file-label">Choose Scheduler.log file</div>
+  </div>
+
+  <!-- Scheduler configuration panel -->
+  <details id="schedulerConfigPanel" hidden>
+    <summary id="schedulerConfigSummary"></summary>
+    <div id="schedulerConfigContent"></div>
+  </details>
+
+  <!-- Visualisation controls -->
+  <div class="stats">
+    <button id="visualiseBtn" class="secondary">Visualise jobs</button>
+  </div>
+
+  <!-- Chart panel -->
+  <details id="chartPanel" hidden>
+    <summary>JobStart load over time</summary>
+    <div class="chart-container">
+      <canvas id="jobChart" height="120"></canvas>
+    </div>
+  </details>
+
+  <div class="stats" id="fileStats"></div>
+
+  <div class="stats" id="timeFilter" hidden>
+    <b>Filter range:</b><br>
+    From: <input type="text" id="fromTime" size="23">
+    To: <input type="text" id="toTime" size="23">
+    <button id="applyFilter">Apply</button>
+  </div>
+
+  <div id="errorLog"></div>
+
+  <table id="resultTable" hidden>
+    <thead>
+      <tr>
+        <th>ClassName</th>
+        <th>JobStart count</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+</div>
+
+<script>
+/* ===================== REGEX ===================== */
+
+const tsRegex = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),(\d{3})/;
+const inputTsRegex = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}),(\d{3})$/;
+
+/* ===================== DOM ===================== */
+
+const fileInput = document.getElementById('fileInput');
+const fileStats = document.getElementById('fileStats');
+const table = document.getElementById('resultTable');
+const tbody = table.querySelector('tbody');
+const fromInput = document.getElementById('fromTime');
+const toInput = document.getElementById('toTime');
+const applyBtn = document.getElementById('applyFilter');
+const timeFilter = document.getElementById('timeFilter');
+const errorLog = document.getElementById('errorLog');
+
+const configPanel = document.getElementById('schedulerConfigPanel');
+const configSummary = document.getElementById('schedulerConfigSummary');
+const configContent = document.getElementById('schedulerConfigContent');
+
+const visualiseBtn = document.getElementById('visualiseBtn');
+const chartPanel = document.getElementById('chartPanel');
+const chartCanvas = document.getElementById('jobChart');
+
+/* ===================== STATE ===================== */
+
+let events = [];
+let firstTsStr = null;
+let lastTsStr = null;
+let schedulerConfigs = [];
+let filteredTotalJobStart = 0;
+
+
+let chartInstance = null;
+let isChartVisible = false;
+
+/* ===================== HELPERS ===================== */
+
+function parseLogTsMs(match) {
+  const iso = match[1].replace(' ', 'T') + '.' + match[2];
+  return Date.parse(iso);
+}
+
+function parseInputTsMs(s) {
+  if (!s) return NaN;
+  const m = s.trim().match(inputTsRegex);
+  if (!m) return NaN;
+  const iso = `${m[1]}T${m[2]}.${m[3]}`;
+  return Date.parse(iso);
+}
+
+function chooseBucketSize(msRange) {
+  const min = 60 * 1000;
+  const hour = 60 * min;
+  const day = 24 * hour;
+
+  if (msRange <= 30 * min) return min;
+  if (msRange <= 6 * hour) return 5 * min;
+  if (msRange <= day) return 15 * min;
+  return hour;
+}
+
+function formatBucketLabel(tsMs) {
+  const d = new Date(tsMs);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ` +
+         `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+
+/* ===================== FILE LOAD ===================== */
+
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  events = [];
+  schedulerConfigs = [];
+  firstTsStr = null;
+  lastTsStr = null;
+
+  tbody.innerHTML = '';
+  table.hidden = true;
+  timeFilter.hidden = true;
+  configPanel.hidden = true;
+  chartPanel.hidden = true;
+  isChartVisible = false;
+  errorLog.textContent = '';
+  fileStats.textContent = 'Processing…';
+
+  const reader = file.stream().getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let currentConfig = null;
+
+  function read() {
+    reader.read().then(({ value, done }) => {
+      if (done) {
+        processBuffer(true);
+        finalize();
+        return;
+      }
+      buffer += decoder.decode(value, { stream:true });
+      processBuffer(false);
+      read();
+    });
+  }
+
+  function processBuffer(final) {
+    let lines = buffer.split('\n');
+    if (!final) buffer = lines.pop();
+
+    for (const line of lines) {
+      const tsMatch = line.match(tsRegex);
+
+      if (tsMatch) {
+        if (currentConfig) {
+          schedulerConfigs.push(currentConfig);
+          currentConfig = null;
+        }
+
+        const tsStr = `${tsMatch[1]},${tsMatch[2]}`;
+        const tsMs = parseLogTsMs(tsMatch);
+
+        if (!firstTsStr) firstTsStr = tsStr;
+        lastTsStr = tsStr;
+
+        if (line.includes('LogSchedulerConfiguration')) {
+          currentConfig = { tsStr, text: line + '\n' };
+          continue;
+        }
+
+        if (line.includes('JobStart')) {
+          const cls = line.match(/className:([^,\]]+)/);
+          if (cls) events.push({ tsMs, className: cls[1].trim() });
+        }
+      } else if (currentConfig) {
+        currentConfig.text += line + '\n';
+      }
+    }
+  }
+
+  function finalize() {
+    if (currentConfig) schedulerConfigs.push(currentConfig);
+
+    fileStats.innerHTML = `
+      <div><b>First log entry:</b> ${firstTsStr}</div>
+      <div><b>Last log entry:</b> ${lastTsStr}</div>
+      <div><b>Total JobStart:</b> ${events.length}</div>
+    `;
+
+    fromInput.value = firstTsStr;
+    toInput.value = lastTsStr;
+
+    renderSchedulerConfigs();
+
+    timeFilter.hidden = false;
+    applyFilter();
+  }
+
+  read();
+});
+
+/* ===================== CONFIG PANEL ===================== */
+
+function highlightConfigKeys(text) {
+  const keys = [
+    'scheduler.instanceId',
+    'jobStore.clustered',
+    'jobStore.acquireTriggersWithinLock'
+  ];
+
+  let result = text;
+  for (const key of keys) {
+    const re = new RegExp(`(^|\\n)(quartz\\.${key})(\\s*=)`, 'g');
+    result = result.replace(re, `$1<span class="config-key">$2</span>$3`);
+  }
+  return result;
+}
+
+function renderSchedulerConfigs() {
+  configContent.innerHTML = '';
+
+  if (!schedulerConfigs.length) {
+    configSummary.textContent =
+      'Scheduler configuration messages: not found in this file';
+    configContent.innerHTML =
+      '<div class="stats">No LogSchedulerConfiguration entries were found.</div>';
+    configPanel.hidden = false;
+    return;
+  }
+
+  configSummary.textContent =
+    `Scheduler configuration messages (${schedulerConfigs.length})`;
+
+  schedulerConfigs.forEach((cfg, i) => {
+    const div = document.createElement('div');
+    div.className = 'config-block';
+    div.innerHTML = `
+      <b>#${i + 1} — ${cfg.tsStr}</b>
+      <pre>${highlightConfigKeys(cfg.text)}</pre>
+    `;
+    configContent.appendChild(div);
+  });
+
+  configPanel.hidden = false;
+}
+
+/* ===================== FILTER ===================== */
+
+applyBtn.addEventListener('click', applyFilter);
+
+function applyFilter() {
+  errorLog.textContent = '';
+
+  const fromMs = parseInputTsMs(fromInput.value);
+  const toMs = parseInputTsMs(toInput.value);
+
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
+    errorLog.textContent =
+      'Invalid time format. Expected: YYYY-MM-DD HH:mm:ss,SSS';
+    return;
+  }
+
+  if (fromMs > toMs) {
+    errorLog.textContent = 'Invalid range: From is greater than To';
+    return;
+  }
+
+  const stats = {};
+  filteredTotalJobStart = 0;
+
+  for (const e of events) {
+    if (e.tsMs < fromMs || e.tsMs > toMs) continue;
+
+    filteredTotalJobStart++;
+    stats[e.className] = (stats[e.className] || 0) + 1;
+  }
+
+
+  tbody.innerHTML = '';
+  Object.entries(stats)
+    .sort((a,b)=>b[1]-a[1])
+    .forEach(([cls,cnt])=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${cls}</td><td>${cnt}</td>`;
+      tbody.appendChild(tr);
+    });
+
+  table.hidden = false;
+
+  fileStats.innerHTML = `
+    <div><b>First log entry:</b> ${firstTsStr}</div>
+    <div><b>Last log entry:</b> ${lastTsStr}</div>
+    <div><b>Total JobStart:</b> ${events.length}</div>
+    <div><b>Total JobStart (filtered):</b> ${filteredTotalJobStart}</div>
+  `;
+
+  if (isChartVisible && chartInstance) {
+    renderJobChart();
+  }
+}
+
+/* ===================== CHART ===================== */
+
+visualiseBtn.addEventListener('click', () => {
+  chartPanel.hidden = false;
+  chartPanel.open = true;
+  isChartVisible = true;
+  renderJobChart();
+});
+
+chartPanel.addEventListener('toggle', () => {
+  if (!chartPanel.open) isChartVisible = false;
+});
+
+function renderJobChart() {
+  const fromMs = parseInputTsMs(fromInput.value);
+  const toMs = parseInputTsMs(toInput.value);
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return;
+
+  const rangeMs = toMs - fromMs;
+  const bucketSize = chooseBucketSize(rangeMs);
+
+  // bucketTs -> { total, byClass }
+  const buckets = new Map();
+
+  for (const e of events) {
+    if (e.tsMs < fromMs || e.tsMs > toMs) continue;
+
+    const bucketTs = Math.floor(e.tsMs / bucketSize) * bucketSize;
+
+    if (!buckets.has(bucketTs)) {
+      buckets.set(bucketTs, { total: 0, byClass: new Map() });
+    }
+
+    const b = buckets.get(bucketTs);
+    b.total++;
+    b.byClass.set(e.className, (b.byClass.get(e.className) || 0) + 1);
+  }
+
+  if (!buckets.size) return;
+
+  // sort buckets by time
+  const bucketKeys = Array.from(buckets.keys()).sort((a, b) => a - b);
+
+  // calculate totals per class
+  const classTotals = new Map();
+  for (const b of buckets.values()) {
+    for (const [cls, cnt] of b.byClass) {
+      classTotals.set(cls, (classTotals.get(cls) || 0) + cnt);
+    }
+  }
+
+  // pick top-N classes
+  const TOP_N = 8;
+  const topClasses = Array.from(classTotals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, TOP_N)
+    .map(e => e[0]);
+
+  // prepare datasets
+  const colors = [
+    '#3b82f6', '#22c55e', '#f97316', '#e11d48',
+    '#a855f7', '#14b8a6', '#facc15', '#38bdf8'
+  ];
+
+  const datasets = [];
+
+  topClasses.forEach((cls, i) => {
+    datasets.push({
+      label: cls,
+      stack: 'jobstart',
+      backgroundColor: colors[i % colors.length],
+      data: bucketKeys.map(ts => buckets.get(ts).byClass.get(cls) || 0)
+    });
+  });
+
+  // "Other" dataset
+  datasets.push({
+    label: 'Other',
+    stack: 'jobstart',
+    backgroundColor: '#475569',
+    data: bucketKeys.map(ts => {
+      const b = buckets.get(ts);
+      let sum = 0;
+      for (const [cls, cnt] of b.byClass) {
+        if (!topClasses.includes(cls)) sum += cnt;
+      }
+      return sum;
+    })
+  });
+
+  // x-axis labels (timezone-agnostic, like logs)
+  const labels = bucketKeys.map(formatBucketLabel);
+
+  if (!chartInstance) {
+    chartInstance = new Chart(chartCanvas, {
+      type: 'bar',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        animation: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        scales: {
+          x: { stacked: true },
+          y: {
+            stacked: true,
+            beginAtZero: true,
+            ticks: { precision: 0 }
+          }
+        },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}`,
+              footer: items => {
+                let total = 0;
+                for (const it of items) {
+                  total += it.parsed.y || 0;
+                }
+                return `Total JobStart: ${total}`;
+              }
+            }
+          },
+          legend: {
+            labels: {
+              color: '#e5e7eb',
+              boxWidth: 12
+            }
+          }
+        }
+      }
+    });
+  } else {
+    chartInstance.data.labels = labels;
+    chartInstance.data.datasets = datasets;
+    chartInstance.update();
+  }
+}
+
+
+</script>
+
+</body>
+</html>
